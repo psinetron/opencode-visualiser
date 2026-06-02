@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode Visualizer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const W = 640, H = 480
+
+const SPAWN_POINT = { x: 330, y: 120 }
+const REST_AREA = { x1: 240, y1: 190, x2: 400, y2: 230 }
+
+const DESKS = [
+  { deskX: 125, deskY: 220, agentX: 145, agentY: 175 },
+  { deskX: 125, deskY: 325, agentX: 145, agentY: 280 },
+  { deskX: 125, deskY: 430, agentX: 145, agentY: 395 },
+  { deskX: 325, deskY: 325, agentX: 345, agentY: 280 },
+  { deskX: 325, deskY: 430, agentX: 345, agentY: 395 },
+]
+
+const COFFEE_TABLES = [
+  { x: 550, y: 250 },
+  { x: 550, y: 420 },
+]
+
+const COFFEE_SPOTS = [
+  { x: 500, y: 210 }, { x: 545, y: 195 }, { x: 590, y: 210 },
+  { x: 500, y: 365 }, { x: 545, y: 350 }, { x: 590, y: 365 },
+]
+
+const WALK_SPEED = 80 // px/sec
+
+const VERT_CORRIDORS = [220, 450]
+
+const SKINS = {
+  person1: {
+    base: "person1/person1",
+    anims: {
+      idle:    { folder: "idle", frames: 4, dirs: ["south"] },
+      walk:    { folder: "walk", frames: 6, dirs: ["south","east","north","west"] },
+      sit:     { folder: "sit", frames: 7, dirs: ["south"] },
+      work:    { folder: "work", frames: 6, dirs: ["south"] },
+      error:   { folder: "error", frames: 6, dirs: ["south"] },
+      coffee:  { folder: "coffee", frames: 6, dirs: ["south"] },
+      scratch: { folder: "scratch", frames: 6, dirs: ["south"] },
+      yawn:    { folder: "yawn", frames: 7, dirs: ["south"] },
+    }
+  },
+  person2: {
+    base: "person2/person2",
+    anims: {
+      idle:    { folder: "idle", frames: 4, dirs: ["south"] },
+      walk:    { folder: "walk", frames: 6, dirs: ["south","east","north","west"] },
+      sit:     { folder: "sit", frames: 7, dirs: ["south"] },
+      work:    { folder: "work", frames: 8, dirs: ["south"] },
+      coffee:  { folder: "coffee", frames: 7, dirs: ["south"] },
+      scratch: { folder: "scratch", frames: 6, dirs: ["south"] },
+      yawn:    { folder: "yawn", frames: 13, dirs: ["south"] },
+    }
+  },
+  person3: {
+    base: "person3/person3",
+    anims: {
+      idle:    { folder: "idle", frames: 4, dirs: ["south"] },
+      walk:    { folder: "walk", frames: 6, dirs: ["south","east","north","west"] },
+      sit:     { folder: "sit", frames: 7, dirs: ["south"] },
+      work:    { folder: "work", frames: 6, dirs: ["south"] },
+      coffee:  { folder: "coffee", frames: 13, dirs: ["south"] },
+      scratch: { folder: "scratch", frames: 6, dirs: ["south"] },
+      yawn:    { folder: "yawn", frames: 12, dirs: ["south"] },
+    }
+  },
+  person4: {
+    base: "person4/person4",
+    anims: {
+      idle:    { folder: "idle", frames: 4, dirs: ["south"] },
+      walk:    { folder: "walk", frames: 6, dirs: ["south","east","north","west"] },
+      sit:     { folder: "sit", frames: 7, dirs: ["south"] },
+      work:    { folder: "work", frames: 6, dirs: ["south"] },
+      coffee:  { folder: "coffee", frames: 9, dirs: ["south"] },
+      scratch: { folder: "scratch", frames: 7, dirs: ["south"] },
+      yawn:    { folder: "yawn", frames: 8, dirs: ["south"] },
+    }
+  },
+  person5: {
+    base: "person5/person5",
+    anims: {
+      idle:    { folder: "idle", frames: 4, dirs: ["south"] },
+      walk:    { folder: "walk", frames: 6, dirs: ["south","east","north","west"] },
+      sit:     { folder: "sit", frames: 7, dirs: ["south"] },
+      work:    { folder: "work", frames: 7, dirs: ["south"] },
+      coffee:  { folder: "coffee", frames: 11, dirs: ["south"] },
+      scratch: { folder: "scratch", frames: 12, dirs: ["south"] },
+      yawn:    { folder: "yawn", frames: 9, dirs: ["south"] },
+    }
+  },
+}
+
+const WORK_ACTIONS = ["scratch", "yawn"]
+
+const ANIM_FPS = 6
+
+let animFrames = {} // key: { south: [img,...], east: [img,...], ... }
+let deskImg = null, coffeeTableImg = null, floorPattern = null
+let drawObjects = []
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => { console.warn("fail:", src); resolve(null) }
+    img.src = src
+  })
+}
+
+async function preloadAll() {
+  const animPromises = []
+  const animSlots = []
+  for (const [skinId, skin] of Object.entries(SKINS)) {
+    animFrames[skinId] = {}
+    for (const [key, def] of Object.entries(skin.anims)) {
+      animFrames[skinId][key] = {}
+      for (const dir of def.dirs) {
+        animFrames[skinId][key][dir] = new Array(def.frames)
+        for (let i = 0; i < def.frames; i++) {
+          const num = String(i).padStart(3, "0")
+          const path = `${skin.base}/animations/${def.folder}/${dir}/frame_${num}.png`
+          animPromises.push(loadImage(path))
+          animSlots.push({ skinId, key, dir, i })
+        }
+      }
+    }
+  }
+  const animResults = await Promise.all(animPromises)
+  for (let j = 0; j < animSlots.length; j++) {
+    const { skinId, key, dir, i } = animSlots[j]
+    animFrames[skinId][key][dir][i] = animResults[j]
+  }
+  // fill missing dirs with south
+  for (const [skinId, skin] of Object.entries(SKINS)) {
+    for (const key of Object.keys(skin.anims)) {
+      for (const dir of ["north","south","east","west","north-east","south-east","south-west","north-west"]) {
+        if (!animFrames[skinId][key][dir]) animFrames[skinId][key][dir] = animFrames[skinId][key]["south"] || []
+      }
+    }
+  }
+  // Objects + background in parallel
+  const [desk, coffee, bg] = await Promise.all([
+    loadImage("textures/desktop.png"),
+    loadImage("textures/coffeetable.png"),
+    loadImage("textures/background.png"),
+  ])
+  deskImg = desk
+  coffeeTableImg = coffee
+  if (bg) {
+    const c = document.createElement("canvas")
+    c.width = bg.width; c.height = bg.height
+    c.getContext("2d").drawImage(bg, 0, 0)
+    floorPattern = ctx.createPattern(c, "repeat")
+  }
+}
+
+// ============================================================
+// PATH FINDING
+// ============================================================
+function findPath(fromX, fromY, toX, toY, viaRestArea = false, direct = false) {
+  if (!direct && !viaRestArea) {
+    const inRest = fromX >= REST_AREA.x1 - 30 && fromX <= REST_AREA.x2 + 30
+                && fromY >= REST_AREA.y1 - 20 && fromY <= REST_AREA.y2 + 20
+    if (inRest) direct = true
+  }
+  if (direct) {
+    return [{x:fromX, y:fromY}, {x:toX, y:toY}]
+  }
+  const path = [{x:fromX, y:fromY}]
+  let cx = fromX, cy = fromY
+
+  function goH(tx) { if (Math.abs(tx - cx) > 1) { path.push({x:tx, y:cy}); cx = tx } }
+  function goV(ty) { if (Math.abs(ty - cy) > 1) { path.push({x:cx, y:ty}); cy = ty } }
+
+  if (viaRestArea) {
+    const corridor = VERT_CORRIDORS.reduce((a,b) => Math.abs(a-cx) < Math.abs(b-cx) ? a : b)
+    goH(corridor)
+    const restY = REST_AREA.y1 + Math.random() * (REST_AREA.y2 - REST_AREA.y1)
+    goV(restY)
+    const targetCorridor = toX > 450 ? 450 : 220
+    goH(targetCorridor)
+    goV(toY)
+    goH(toX)
+  } else {
+    const corridor = VERT_CORRIDORS.reduce((a,b) => Math.abs(a-cx) < Math.abs(b-cx) ? a : b)
+    if (Math.abs(toX - cx) > 30 || Math.abs(toY - cy) > 30) {
+      goH(corridor)
+      goV(toY)
+      goH(toX)
+    } else {
+      goH(toX)
+      goV(toY)
+    }
+  }
+
+  if (cx !== toX || cy !== toY) {
+    path.push({x:toX, y:toY})
+  }
+  return path
+}
+
+function randomRestPos() {
+  const pad = 20
+  return {
+    x: REST_AREA.x1 + pad + Math.random() * (REST_AREA.x2 - REST_AREA.x1 - pad*2),
+    y: REST_AREA.y1 + pad + Math.random() * (REST_AREA.y2 - REST_AREA.y1 - pad*2),
+  }
+}
+
+// ============================================================
+// AGENT
+// ============================================================
+let agentIdCounter = 0
+const agents = []
+const reservedCoffeeSpots = new Set()
+
+function getFreeDeskIndex() {
+  const used = new Set(agents.filter(a => a.deskIndex >= 0).map(a => a.deskIndex))
+  for (let i = 0; i < DESKS.length; i++) {
+    if (!used.has(i)) return i
+  }
+  return -1
+}
+
+function getFreeCoffeeSpot() {
+  for (let i = 0; i < COFFEE_SPOTS.length; i++) {
+    if (!reservedCoffeeSpots.has(i)) return i
+  }
+  return -1
+}
+
+function createAgent(instanceId, cwd, skin) {
+  const existing = agents.find(a => a.instanceId === instanceId)
+  if (existing) return existing
+  if (agents.length >= 5) return null
+  const id = agentIdCounter++
+  const skinIds = Object.keys(SKINS)
+  const usedSkins = new Set(agents.map(a => a.skinId))
+  if (skin && SKINS[skin] && !usedSkins.has(skin)) {
+    // Provided skin is valid and free — use it
+  } else {
+    skin = skinIds.find(s => !usedSkins.has(s))
+    if (!skin) {
+      skin = skinIds[Math.floor(Math.random() * skinIds.length)]
+    }
+  }
+  localStorage.setItem('viz-last-skin', skin)
+  const a = {
+    id, instanceId, cwd,
+    skinId: skin,
+    state: "spawning",
+    x: SPAWN_POINT.x, y: SPAWN_POINT.y,
+    opacity: 0,
+    animKey: "idle",
+    animFrame: 0, animTimer: 0,
+    direction: "south",
+    path: [],
+    pathIndex: 0,
+    pathProgress: 0,
+    deskIndex: -1,
+    coffeeSpot: -1,
+    spawnOrder: agents.length,
+    coffeeHoldTimer: 0,
+    exitingAfterRest: false,
+    workActionTimer: 3 + Math.random() * 7,
+    workActionAnim: null,
+    workActionReverse: false,
+    workReverse: false,
+    coffeeReverse: false,
+  }
+  agents.push(a)
+  console.log(`[viz] Agent ${id} spawning`)
+  return a
+}
+
+function removeAgent(instanceId) {
+  const a = agents.find(a => a.instanceId === instanceId)
+  if (!a) return
+  // Release resources
+  if (a.coffeeSpot >= 0) reservedCoffeeSpots.delete(a.coffeeSpot)
+  a.deskIndex = -1
+  a.coffeeSpot = -1
+  // Walk to rest area first, then exit
+  const restPos = randomRestPos()
+  a.state = "walking"
+  a.goalState = "rest_area"
+  a.exitingAfterRest = true
+  a.path = findPath(a.x, a.y, restPos.x, restPos.y)
+  a.pathIndex = 0
+  a.pathProgress = 0
+}
+
+function assignAgentWork(a) {
+  if (a.state === "working" || a.state === "sitting" || a.state === "error") return
+  if (a.state === "walking_to_desk") return
+
+  // If still walking to rest area, defer work assignment
+  if (a.state === "walking" && a.goalState === "rest_area") {
+    a.pendingWork = true
+    return
+  }
+
+  // Release coffee spot if any
+  if (a.coffeeSpot >= 0) { reservedCoffeeSpots.delete(a.coffeeSpot); a.coffeeSpot = -1 }
+
+  // Get a desk
+  if (a.deskIndex < 0) {
+    a.deskIndex = getFreeDeskIndex()
+  }
+  if (a.deskIndex < 0) return // no free desks
+
+  const desk = DESKS[a.deskIndex]
+  const destX = a.skinId !== "person1" ? desk.deskX : desk.agentX
+  const destY = desk.agentY
+
+  const fromRest = a.state === "rest_area"
+  // Approach desk from the side: first go to offset point, then walk horizontally to desk
+  const approachX = desk.deskX < 200 ? destX + 25 : destX - 25
+
+  a.state = "walking_to_desk"
+  a.path = findPath(a.x, a.y, approachX, destY, false, fromRest)
+  a.path.push({ x: destX, y: destY })
+  a.pathIndex = 0
+  a.pathProgress = 0
+  console.log(`[viz] Agent ${a.id} walking to desk ${a.deskIndex}`)
+}
+
+function assignAgentCoffee(a) {
+  if (a.state === "coffee" || a.state === "walking_to_coffee") return
+
+  const spotIdx = getFreeCoffeeSpot()
+  if (spotIdx < 0) return // no free spots
+
+  reservedCoffeeSpots.add(spotIdx)
+  a.coffeeSpot = spotIdx
+
+  const spot = COFFEE_SPOTS[spotIdx]
+  const viaRest = a.deskIndex >= 0 && a.deskIndex <= 2
+  const fromRest = a.state === "rest_area"
+
+  a.state = "walking_to_coffee"
+  a.path = findPath(a.x, a.y, spot.x, spot.y, viaRest, fromRest)
+  a.pathIndex = 0
+  a.pathProgress = 0
+  console.log(`[viz] Agent ${a.id} walking to coffee spot ${spotIdx}`)
+}
+
+function updateAgent(a, dt) {
+  // State transitions
+  switch (a.state) {
+    case "spawning":
+      a.opacity = Math.min(1, a.opacity + dt * 2)
+      if (a.opacity >= 1) {
+        const pos = randomRestPos()
+        a.state = "walking"
+        a.path = [{x:a.x, y:a.y}, pos]
+        a.pathIndex = 0
+        a.pathProgress = 0
+        a.goalState = "rest_area"
+        a.opacity = 1
+      }
+      break
+
+    case "rest_area":
+      a.animKey = "idle"
+      a.direction = "south"
+      break
+
+    case "walking":
+    case "walking_to_desk":
+    case "walking_to_coffee":
+    case "walking_to_exit":
+      a.animKey = "walk"
+      break
+
+    case "sitting":
+      a.animKey = "sit"
+      a.direction = "south"
+      a.animTimer += dt
+      while (a.animTimer >= 1 / ANIM_FPS) {
+        a.animTimer -= 1 / ANIM_FPS
+        a.animFrame++
+        if (a.animFrame >= SKINS[a.skinId].anims["sit"].frames) {
+          a.animFrame = 0; a.animTimer = 0
+          a.state = "working"
+        }
+      }
+      break
+
+    case "working":
+      if (a.workActionAnim) {
+        a.animKey = a.workActionAnim
+        a.direction = "south"
+        a.animTimer += dt
+        while (a.animTimer >= 1 / ANIM_FPS) {
+          a.animTimer -= 1 / ANIM_FPS
+          if (a.workActionReverse) {
+            a.animFrame--
+            if (a.animFrame < 0) {
+              a.animFrame = 0
+              a.animTimer = 0
+              a.animKey = "work"
+              a.workActionAnim = null
+              a.workActionReverse = false
+              a.workActionTimer = 3 + Math.random() * 7
+              break
+            }
+          } else {
+            a.animFrame++
+            if (a.animFrame >= SKINS[a.skinId].anims[a.workActionAnim].frames) {
+              a.workActionReverse = true
+              a.animFrame = SKINS[a.skinId].anims[a.workActionAnim].frames - 2
+              if (a.animFrame < 0) { a.animFrame = 0; a.workActionReverse = false }
+              break
+            }
+          }
+        }
+      } else {
+        a.workActionTimer -= dt
+        if (a.workActionTimer <= 0) {
+          a.workActionAnim = WORK_ACTIONS[Math.floor(Math.random() * WORK_ACTIONS.length)]
+          a.animFrame = 0
+          a.animTimer = 0
+          a.workActionReverse = false
+          a.animKey = a.workActionAnim
+        } else {
+          a.animKey = "work"
+          a.direction = "south"
+          const def = SKINS[a.skinId].anims["work"]
+          a.animTimer += dt
+          while (a.animTimer >= 1 / ANIM_FPS) {
+            a.animTimer -= 1 / ANIM_FPS
+            if (a.workReverse) {
+              a.animFrame--
+              if (a.animFrame < 0) { a.animFrame = 1; a.workReverse = false }
+            } else {
+              a.animFrame++
+              if (a.animFrame >= def.frames) { a.animFrame = def.frames - 2; a.workReverse = true }
+            }
+          }
+        }
+      }
+      break
+
+    case "error":
+      a.animKey = "error"
+      a.direction = "south"
+      const errDef = SKINS[a.skinId].anims["error"]
+      if (!errDef) { a.state = "working"; break }
+      a.animTimer += dt
+      while (a.animTimer >= 1 / ANIM_FPS) {
+        a.animTimer -= 1 / ANIM_FPS
+        a.animFrame++
+        if (a.animFrame >= errDef.frames) {
+          a.animFrame = 0; a.animTimer = 0
+          a.state = "working"
+        }
+      }
+      break
+
+    case "standing":
+      a.animKey = "sit"
+      a.direction = "south"
+      a.animTimer += dt
+      while (a.animTimer >= 1 / ANIM_FPS) {
+        a.animTimer -= 1 / ANIM_FPS
+        a.animFrame--
+        if (a.animFrame < 0) {
+          a.animFrame = 0; a.animTimer = 0
+          // Release coffee spot reservation if we already have one
+          // (it was reserved in assignAgentCoffee or in idle handler)
+          if (a.coffeeSpot < 0) {
+            const spotIdx = getFreeCoffeeSpot()
+            if (spotIdx >= 0) {
+              reservedCoffeeSpots.add(spotIdx)
+              a.coffeeSpot = spotIdx
+            }
+          }
+          if (a.coffeeSpot >= 0) {
+            const spot = COFFEE_SPOTS[a.coffeeSpot]
+            const viaRest = a.deskIndex >= 0 && a.deskIndex <= 2
+            a.state = "walking_to_coffee"
+            a.path = findPath(a.x, a.y, spot.x, spot.y, viaRest)
+            a.pathIndex = 0; a.pathProgress = 0
+          } else {
+            a.state = "rest_area"
+          }
+        }
+      }
+      break
+
+    case "coffee":
+      a.animKey = "coffee"
+      a.direction = "south"
+      const coffeeDef = SKINS[a.skinId].anims["coffee"]
+      if (a.coffeeHoldTimer > 0) {
+        a.coffeeHoldTimer -= dt
+        if (a.coffeeHoldTimer <= 0) {
+          a.coffeeHoldTimer = 0
+          a.animTimer = 0
+        }
+      } else {
+        a.animTimer += dt
+        while (a.animTimer >= 1 / ANIM_FPS) {
+          a.animTimer -= 1 / ANIM_FPS
+          if (a.coffeeReverse) {
+            a.animFrame--
+            if (a.animFrame < 0) {
+              a.animFrame = 0
+              a.coffeeReverse = false
+              a.coffeeHoldTimer = 2.0
+              a.animTimer = 0
+              break
+            }
+          } else {
+            a.animFrame++
+            if (a.animFrame >= coffeeDef.frames) {
+              a.coffeeReverse = true
+              a.animFrame = coffeeDef.frames - 2
+              if (a.animFrame < 0) { a.animFrame = 0; a.coffeeReverse = false }
+              break
+            }
+          }
+        }
+      }
+      break
+
+    case "exiting":
+      a.opacity = Math.max(0, a.opacity - dt * 2)
+      if (a.opacity <= 0) {
+        const idx = agents.indexOf(a)
+        if (idx >= 0) agents.splice(idx, 1)
+        if (a.coffeeSpot >= 0) reservedCoffeeSpots.delete(a.coffeeSpot)
+      }
+      break
+  }
+
+  // Movement along path
+  while (a.path && a.path.length > 1 && a.pathIndex < a.path.length - 1) {
+    const from = a.path[a.pathIndex]
+    const to = a.path[a.pathIndex + 1]
+    const dx = to.x - from.x
+    const dy = to.y - from.y
+    const segLen = Math.sqrt(dx*dx + dy*dy)
+    if (segLen < 0.1) {
+      a.x = to.x
+      a.y = to.y
+      a.pathIndex++
+      a.pathProgress = 0
+      continue
+    }
+    a.pathProgress += (WALK_SPEED * dt) / segLen
+    if (a.pathProgress >= 1) {
+      a.x = to.x
+      a.y = to.y
+      a.pathIndex++
+      a.pathProgress = 0
+      if (a.pathIndex >= a.path.length - 1) {
+        const goal = a.path[a.pathIndex]
+        a.x = goal.x
+        a.y = goal.y
+        a.path = []
+        switch (a.state) {
+          case "walking": if (a.goalState === "rest_area") {
+            if (a.exitingAfterRest) {
+              a.exitingAfterRest = false
+              a.state = "walking_to_exit"
+              a.path = findPath(a.x, a.y, SPAWN_POINT.x, SPAWN_POINT.y, false, true)
+              a.pathIndex = 0
+              a.pathProgress = 0
+            } else {
+              a.state = "rest_area"
+              if (a.pendingWork) { a.pendingWork = false; assignAgentWork(a) }
+            }
+          } else {
+            a.state = "rest_area"
+          } break
+          case "walking_to_desk": a.state = "sitting"; a.animFrame = 0; a.animTimer = 0; break
+          case "walking_to_coffee": a.state = "coffee"; a.animFrame = 0; a.animTimer = 0; a.coffeeHoldTimer = 2.0; a.coffeeReverse = false; break
+          case "walking_to_exit": a.state = "exiting"; break
+        }
+        break
+      }
+      continue
+    }
+    a.x = from.x + dx * a.pathProgress
+    a.y = from.y + dy * a.pathProgress
+    if (Math.abs(dx) > Math.abs(dy)) {
+      a.direction = dx > 0 ? "east" : "west"
+    } else {
+      a.direction = dy > 0 ? "south" : "north"
+    }
+    a.animKey = "walk"
+    break
+  }
+
+  // Animation frame (skip for sit/stand/error/coffee/working — they manage their own frames)
+  if (a.state !== "sitting" && a.state !== "standing" && a.state !== "error" && a.state !== "coffee" && a.state !== "working") {
+    const def = SKINS[a.skinId].anims[a.animKey]
+    if (def) {
+      a.animTimer += dt
+      while (a.animTimer >= 1 / ANIM_FPS) {
+        a.animTimer -= 1 / ANIM_FPS
+        a.animFrame = (a.animFrame + 1) % def.frames
+      }
+    }
+  }
+
+  // Cap opacity
+  a.opacity = Math.max(0, Math.min(1, a.opacity))
+
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function drawAgent(a) {
+  const dir = a.direction || "south"
+  const frames = animFrames[a.skinId]?.[a.animKey]?.[dir] || animFrames[a.skinId]?.[a.animKey]?.["south"]
+  if (!frames || !frames.length) return
+  const img = frames[a.animFrame % frames.length]
+  if (!img) return
+
+  ctx.save()
+  ctx.globalAlpha = a.opacity
+  ctx.drawImage(img, a.x - img.width, a.y - img.height, img.width * 2, img.height * 2)
+  ctx.restore()
+}
+
+function drawAll() {
+  ctx.clearRect(0, 0, W, H)
+  ctx.imageSmoothingEnabled = false
+
+  // Background
+  if (floorPattern) {
+    ctx.fillStyle = floorPattern
+    ctx.fillRect(0, 0, W, H)
+  } else {
+    ctx.fillStyle = "#1a1a2e"
+    ctx.fillRect(0, 0, W, H)
+  }
+
+  // Collect all objects for Y-sorting — reuse array
+  drawObjects.length = 0
+
+  // Desks
+  if (deskImg) {
+    for (const d of DESKS) {
+      drawObjects.push({
+        y: d.deskY,
+        draw() { ctx.drawImage(deskImg, d.deskX - deskImg.width/2, d.deskY - deskImg.height/2) }
+      })
+    }
+  }
+
+  // Coffee tables
+  if (coffeeTableImg) {
+    for (const t of COFFEE_TABLES) {
+      drawObjects.push({
+        y: t.y,
+        draw() { ctx.drawImage(coffeeTableImg, t.x - coffeeTableImg.width/2, t.y - coffeeTableImg.height/2) }
+      })
+    }
+  }
+
+  // Agents
+  for (const a of agents) {
+    drawObjects.push({ y: a.y, draw: () => drawAgent(a) })
+  }
+
+  drawObjects.sort((a, b) => a.y - b.y)
+  for (const o of drawObjects) o.draw()
+
+  // Desk labels on top — project name for each occupied desk
+  ctx.font = "10px monospace"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "top"
+  ctx.fillStyle = "#400d03"
+  const LABEL_W = 100, LINE_H = 12, MAX_LINES = 2
+  const seenDesks = new Set()
+  for (const a of agents) {
+    if (a.deskIndex < 0 || seenDesks.has(a.deskIndex)) continue
+    seenDesks.add(a.deskIndex)
+    const d = DESKS[a.deskIndex]
+    const name = (a.cwd || "").split("/").pop() || a.cwd || ""
+    const lines = []
+    let cur = ""
+    for (let i = 0; i < name.length; i++) {
+      const test = cur + name[i]
+      if (ctx.measureText(test).width > LABEL_W && cur.length > 0) {
+        lines.push(cur)
+        cur = name[i]
+        if (lines.length >= MAX_LINES) break
+      } else {
+        cur = test
+      }
+    }
+    if (cur && lines.length < MAX_LINES) lines.push(cur)
+    for (let li = 0; li < lines.length; li++) {
+      ctx.fillText(lines[li], d.deskX, d.deskY + li * LINE_H)
+    }
+  }
+}
+
+// ============================================================
+// MAIN LOOP
+// ============================================================
+const canvas = document.getElementById("canvas")
+const ctx = canvas.getContext("2d")
+
+canvas.width = W * devicePixelRatio
+canvas.height = H * devicePixelRatio
+canvas.style.width = W + "px"
+canvas.style.height = H + "px"
+ctx.scale(devicePixelRatio, devicePixelRatio)
+
+let lastTime = performance.now()
+function loop(time) {
+  const dt = Math.min((time - lastTime) / 1000, 0.1)
+  lastTime = time
+
+  for (let i = agents.length - 1; i >= 0; i--) updateAgent(agents[i], dt)
+  drawAll()
+  requestAnimationFrame(loop)
+}
+
+// ============================================================
+// WEBSOCKET
+// ============================================================
+function connect() {
+  const sock = new WebSocket(`ws://${location.host}`)
+  sock.onopen = () => sock.send(JSON.stringify({ type: "frontend.register" }))
+
+  sock.onmessage = (e) => {
+    let data
+    try { data = JSON.parse(e.data) } catch { return }
+
+    switch (data.type) {
+      case "state.sync": {
+        const syncIds = new Set((data.instances || []).map(i => i.instanceId))
+        for (const a of [...agents]) {
+          if (!syncIds.has(a.instanceId)) {
+            removeAgent(a.instanceId)
+          }
+        }
+        for (const inst of data.instances || []) {
+          const existing = agents.find(a => a.instanceId === inst.instanceId)
+          if (!existing) {
+            createAgent(inst.instanceId, inst.cwd, inst.skin)
+          }
+        }
+        break
+      }
+      case "instance.added":
+        createAgent(data.instanceId, data.cwd, data.skin)
+        break
+      case "instance.removed":
+        removeAgent(data.instanceId)
+        break
+      case "instance.event": {
+        const a = agents.find(a => a.instanceId === data.instanceId)
+        if (!a) break
+        const evt = data.event
+        switch (evt.type) {
+          case "session.status": {
+            const st = evt.status?.type || evt.status
+            if (st === "busy") assignAgentWork(a)
+            else if (st === "retry") assignAgentWork(a)
+            else {
+              // idle: finish work, go to coffee
+              if (a.state === "working" || a.state === "error" || a.state === "sitting") {
+                a.state = "standing"
+                a.animFrame = SKINS[a.skinId].anims["sit"].frames - 1
+                a.animTimer = 0
+              } else if (a.state === "walking_to_desk") {
+                if (a.deskIndex >= 0) a.deskIndex = -1
+                const restPos = randomRestPos()
+                a.state = "walking"
+                a.goalState = "rest_area"
+                a.path = findPath(a.x, a.y, restPos.x, restPos.y, false, true)
+                a.pathIndex = 0
+                a.pathProgress = 0
+              } else if (a.state === "rest_area" || a.state === "coffee" || a.state === "walking" || a.state === "walking_to_exit") {
+                // Already doing something, don't interrupt
+              } else if (a.state !== "walking_to_coffee" && a.state !== "standing" && a.state !== "exiting" && a.state !== "spawning") {
+                assignAgentCoffee(a)
+              }
+            }
+            break
+          }
+          case "session.idle":
+            if (a.state === "working" || a.state === "error" || a.state === "sitting") {
+              a.state = "standing"
+              a.animFrame = SKINS[a.skinId].anims["sit"].frames - 1
+              a.animTimer = 0
+            } else if (a.state === "walking_to_desk") {
+              if (a.deskIndex >= 0) a.deskIndex = -1
+              const restPos = randomRestPos()
+              a.state = "walking"
+              a.goalState = "rest_area"
+              a.path = findPath(a.x, a.y, restPos.x, restPos.y, false, true)
+              a.pathIndex = 0
+              a.pathProgress = 0
+            } else if (a.state !== "walking_to_coffee" && a.state !== "walking" && a.state !== "coffee" && a.state !== "standing" && a.state !== "exiting" && a.state !== "spawning" && a.state !== "walking_to_exit") {
+              assignAgentCoffee(a)
+            }
+            break
+          case "session.error":
+            if (a.state === "working") {
+              a.state = "error"
+              a.animFrame = 0
+              a.animTimer = 0
+            }
+            break
+          case "tool.execute.after":
+          case "tool.execute.before":
+            if (a.state === "rest_area" || a.state === "coffee" || a.state === "walking_to_coffee" || a.state === "walking") {
+              if (a.coffeeSpot >= 0) { reservedCoffeeSpots.delete(a.coffeeSpot); a.coffeeSpot = -1 }
+              assignAgentWork(a)
+            }
+            break
+          case "session.diff":
+            break
+        }
+        break
+      }
+    }
+  }
+
+  sock.onclose = () => {
+    setTimeout(connect, 2000)
+  }
+}
+
+// ============================================================
+// START
+// ============================================================
+preloadAll().then(() => {
+  console.log("[viz] Assets loaded")
+  connect()
+  requestAnimationFrame(loop)
+})
+</script>
+</body>
+</html>

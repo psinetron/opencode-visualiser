@@ -1,0 +1,16 @@
+{
+  "name": "psinetron-opencode-visualizer",
+  "version": "1.0.4",
+  "main": "index.ts",
+  "description": "OpenCode session visualizer — real-time pixel-art office scene with animated agents",
+  "files": [
+    "index.ts",
+    "visualizer/"
+  ],
+  "keywords": ["opencode", "opencode-plugin", "visualizer", "monitor"],
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "@opencode-ai/plugin": "^0.1.0"
+  }
+}
