@@ -4,7 +4,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/psinetron/opencode-visualiser.svg)](https://github.com/psinetron/opencode-visualiser/stargazers)
 [![NPM Version](https://img.shields.io/npm/v/psinetron-opencode-visualizer.svg)](https://www.npmjs.com/package/psinetron-opencode-visualizer)
 
-**Bringing the custom cruiser ethos to AI orchestration.** Turning raw OpenCode terminal logs into cozy 2D pixel office chaos. Watch your agents work, idle, and celebrate success in a bustling virtual office.
+**Turning raw OpenCode terminal logs into cozy 2D pixel office chaos.**  Watch your agents work, idle, and celebrate success in a bustling virtual office.
 
 ---
 
