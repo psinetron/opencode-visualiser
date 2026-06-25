@@ -4,7 +4,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/psinetron/opencode-visualiser.svg)](https://github.com/psinetron/opencode-visualiser/stargazers)
 [![NPM Version](https://img.shields.io/npm/v/psinetron-opencode-visualizer.svg)](https://www.npmjs.com/package/psinetron-opencode-visualizer)
 
-**Turning raw OpenCode terminal logs into cozy 2D pixel office chaos.**  Watch your agents work, idle, and celebrate success in a bustling virtual office.
+**Turning raw OpenCode terminal logs into cozy 2D pixel office chaos.** Watch your agents work, idle, and celebrate success in a bustling virtual office.
 
 ---
 
@@ -75,6 +75,14 @@ Or install from a local path:
 The plugin automatically assigns a random pixel art skin to each agent and saves it to `.opencode/viz-skin.json` in your project folder. You can manually edit this file to change skins.
 
 Available skins: `person1`, `person2`, `person3`, `person4`, `person5`.
+
+---
+
+## 💙 Support OpenCode
+
+This plugin is built on top of [OpenCode](https://opencode.ai) — an open-source AI coding tool. If you find it useful, consider supporting the project by subscribing to **OpenCode GO**. Using the link below gives you **50% off** and helps fund continued development:
+
+👉 [opencode.ai/go?ref=EZW07YHVTG](https://opencode.ai/go?ref=EZW07YHVTG)
 
 ---
 
