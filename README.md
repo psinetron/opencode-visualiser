@@ -82,7 +82,7 @@ Available skins: `person1`, `person2`, `person3`, `person4`, `person5`.
 
 This plugin is built on top of [OpenCode](https://opencode.ai) — an open-source AI coding tool. If you find it useful, consider supporting the project by subscribing to **OpenCode GO**. Using the link below gives you **50% off** and helps fund continued development:
 
-👉 [opencode.ai/go?ref=EZW07YHVTG](https://opencode.ai/go?ref=EZW07YHVTG)
+👉 [Support Link](https://opencode.ai/go?ref=EZW07YHVTG)
 
 ---
 
