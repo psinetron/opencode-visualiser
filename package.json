@@ -1,6 +1,6 @@
 {
   "name": "psinetron-opencode-visualizer",
-  "version": "1.0.7",
+  "version": "1.0.14",
   "main": "index.ts",
   "exports": {
     "./server": "./index.ts",

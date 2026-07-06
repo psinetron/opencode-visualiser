@@ -1,21 +1,39 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { join } from "path"
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs"
+import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from "fs"
+import { startServer } from "./visualizer/ocv-server"
 
 const SERVER_PORT = 5173
-const DAEMON_PATH = join(import.meta.dir, "visualizer", "ocv-server.ts")
 
-let daemonStarted = false
+let logPath: string | null = null
 
-function ensureDaemon() {
-  if (daemonStarted) return
-  daemonStarted = true
+function initLog(directory: string) {
+  const dir = join(directory, ".opencode")
+  try { mkdirSync(dir, { recursive: true }) } catch {}
+  logPath = join(dir, "ocv-debug.log")
+}
+
+function log(msg: string) {
+  if (!logPath) return
+  const line = `[${new Date().toISOString()}] ${msg}\n`
+  try { appendFileSync(logPath, line) } catch {}
+}
+
+let serverStarted = false
+
+function ensureServer() {
+  if (serverStarted) return
+  serverStarted = true
   try {
-    const proc = Bun.spawn(["bun", DAEMON_PATH], {
-      stdio: ["ignore", "ignore", "ignore"],
-    })
-    proc.unref()
-  } catch {}
+    const ok = startServer()
+    if (ok) {
+      log(`[plugin] Server started in-process on port ${SERVER_PORT}`)
+    } else {
+      log(`[plugin] Server failed to start (port ${SERVER_PORT} may be in use — another instance may already be running)`)
+    }
+  } catch (e) {
+    log(`[plugin] Failed to start server: ${e}`)
+  }
 }
 
 // ─── Plugin client ──────────────────────────────────────────────────
@@ -103,17 +121,27 @@ function sendEvent(eventType: string, payload: Record<string, unknown> = {}) {
 // ─── Plugin export ──────────────────────────────────────────────────
 
 const VisualizerPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  initLog(directory)
   const skin = resolveSkin(directory)
 
-  ensureDaemon()
+  ensureServer()
 
+  let connected = false
   for (let i = 0; i < 20; i++) {
     try {
       await connectToServer(skin)
+      connected = true
+      log(`[plugin] Connected to server on attempt ${i + 1}`)
       break
-    } catch {
+    } catch (e) {
+      if (i === 19) {
+        log(`[plugin] Failed to connect after 20 attempts: ${e}`)
+      }
       await new Promise((r) => setTimeout(r, 300))
     }
+  }
+  if (!connected) {
+    log(`[plugin] Could not connect to ws://localhost:${SERVER_PORT} — is the daemon running?`)
   }
 
   const interestingEvents = new Set([
