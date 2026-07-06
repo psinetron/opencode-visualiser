@@ -29,18 +29,26 @@ For example, uncomment the line below when you have a GIF in your repo:
 
 - **Real-time Visualization:** Watch your OpenCode agents move around their office as they execute tools, search files, and write code.
 - **Cozy Pixel Art Aesthetic:** A calming, gamified view of complex AI orchestration.
-- **Mult-Agent Support:** Visualizes multiple agents (Explore, Scout, etc.) simultaneously in the same shared office space.
+- **Multi-Agent Support:** Visualizes multiple agents (Explore, Scout, etc.) simultaneously in the same shared office space.
 - **Customization (Skins):** Each agent has a custom skin saved in `.opencode/viz-skin.json`.
 - **Unique Agent Animations:** Each of the 5 characters has its own set of unique idle, walk, work, and reaction animations.
-- **Zero Friction Launch:** Pure Bun & TypeScript. Launches a cross-platform, isolated Chrome "app" window using native OS calls. No heavy Electron needed.
+- **Zero Friction Launch:** No dependencies to install — runs on the Bun runtime bundled with OpenCode. Launches a cross-platform, isolated Chrome "app" window using native OS calls. No heavy Electron needed.
 
 ---
 
 ## 🚀 Installation
 
-*Note: Requires [Bun](https://bun.sh) to be installed.*
+No prerequisites — OpenCode ships with the Bun runtime, which handles plugin installation and execution automatically. You do **not** need to install Bun separately.
 
-### Via OpenCode UI (recommended)
+### Via CLI (recommended)
+
+```sh
+opencode plugin psinetron-opencode-visualizer
+```
+
+This installs the plugin from npm and registers it in your project's `opencode.json`. Add `--global` (or `-g`) to install it across all projects, or `--force` (or `-f`) to replace an existing version.
+
+## Via OpenCode UI
 
 1. Press `Control+P` (`Ctrl+P` on Windows/Linux) to open the command palette
 2. Select **Install plugin**
@@ -50,23 +58,60 @@ OpenCode will install the plugin and automatically add it to your project's `ope
 
 ### Manual configuration
 
-Add the plugin to your OpenCode config (`opencode.json`):
+Add the plugin name to your `opencode.json`:
 
 ```json
 {
+  "$schema": "https://opencode.ai/config.json",
   "plugin": ["psinetron-opencode-visualizer"]
 }
 ```
 
-Or install from a local path:
+OpenCode downloads and caches the package from npm automatically on next startup.
+
+### From local files (development)
+
+If you've cloned this repo and want to run from source, point the plugin entry directly at `index.ts`:
 
 ```json
 {
-  "plugin": ["./path/to/OpenCodeVisualizer"]
+  "plugin": ["./path/to/OpenCodeVisualizer/index.ts"]
 }
 ```
 
+Alternatively, copy `index.ts` and the `visualizer/` folder into `.opencode/plugins/` — OpenCode auto-loads any `.ts`/`.js` file placed in that directory.
 
+### After installation
+
+Start (or restart) OpenCode. The plugin spins up a local server on `http://localhost:5173` and opens a Chrome app window automatically. If the browser doesn't open, visit the URL manually.
+
+Each running OpenCode instance appears as a pixel-art character in the office. When you close an instance, its character walks out. If the instance hosting the server is closed, a surviving instance picks up the server role automatically — no interruption.
+
+---
+
+## 🔄 Updating
+
+To update to the latest version, first try reinstalling with the `--force` flag:
+
+```sh
+opencode plugin psinetron-opencode-visualizer --force
+```
+
+If the old version still persists after that, OpenCode's package cache is stale. Clear it manually and restart:
+
+```sh
+rm -rf ~/.cache/opencode/packages/psinetron-opencode-visualizer
+rm -rf ~/.cache/opencode/packages/psinetron-opencode-visualizer@latest
+```
+
+On Windows (PowerShell):
+
+```powershell
+Remove-Item -Recurse -Force ~\.cache\opencode\packages\psinetron-opencode-visualizer
+Remove-Item -Recurse -Force ~\.cache\opencode\packages\psinetron-opencode-visualizer@latest
+```
+
+Then restart OpenCode — it will re-download the latest version from npm on startup.
 
 ---
 

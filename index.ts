@@ -19,20 +19,18 @@ function log(msg: string) {
   try { appendFileSync(logPath, line) } catch {}
 }
 
-let serverStarted = false
-
-function ensureServer() {
-  if (serverStarted) return
-  serverStarted = true
+function tryStartServer(): boolean {
   try {
     const ok = startServer()
     if (ok) {
-      log(`[plugin] Server started in-process on port ${SERVER_PORT}`)
+      log(`[plugin] Server running on port ${SERVER_PORT}`)
     } else {
-      log(`[plugin] Server failed to start (port ${SERVER_PORT} may be in use — another instance may already be running)`)
+      log(`[plugin] Server not started (port ${SERVER_PORT} in use — another instance is the leader)`)
     }
+    return ok
   } catch (e) {
     log(`[plugin] Failed to start server: ${e}`)
+    return false
   }
 }
 
@@ -94,12 +92,22 @@ function connectToServer(skin: string): Promise<void> {
     }
 
     socket.onclose = () => {
+      clearTimeout(timeout)
       ws = null
       if (!reconnectTimer) {
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null
-          connectToServer(skin).catch(() => {})
-        }, 2000)
+          // Leader election: the previous server may have died.
+          // Each surviving instance tries to bind the port; only one wins
+          // (the rest get EADDRINUSE and stay clients). Random jitter
+          // reduces the thundering-herd window when many instances detect
+          // the disconnect simultaneously.
+          const jitter = Math.floor(Math.random() * 500)
+          setTimeout(() => {
+            tryStartServer()
+            connectToServer(skin).catch(() => {})
+          }, jitter)
+        }, 1000)
       }
     }
 
@@ -124,7 +132,7 @@ const VisualizerPlugin: Plugin = async ({ project, client, $, directory, worktre
   initLog(directory)
   const skin = resolveSkin(directory)
 
-  ensureServer()
+  tryStartServer()
 
   let connected = false
   for (let i = 0; i < 20; i++) {

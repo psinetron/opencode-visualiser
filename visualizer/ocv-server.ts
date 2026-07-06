@@ -41,7 +41,11 @@ function trySpawn(cmd: string[], label: string): boolean {
   }
 }
 
+let browserLaunched = false
+
 function openBrowser() {
+  if (browserLaunched) return
+  browserLaunched = true
   const url = `http://localhost:${SERVER_PORT}`
   const os = platform()
 
@@ -81,6 +85,10 @@ function resetShutdownTimer() {
   shutdownTimer = setTimeout(() => {
     if (pluginClients.size === 0 && frontendClients.size === 0) {
       server?.stop()
+      // Clear the reference so startServer() can re-bind on a later call
+      // (e.g. when a surviving instance takes over as the leader).
+      server = null
+      browserLaunched = false
       // Only exit if running standalone, not in-process
       if (isStandalone) process.exit(0)
     }

@@ -745,9 +745,18 @@ function loop(time) {
 // ============================================================
 // WEBSOCKET
 // ============================================================
+let disconnectTimer = null
+const DISCONNECT_TIMEOUT = 10000
+
 function connect() {
   const sock = new WebSocket(`ws://${location.host}`)
-  sock.onopen = () => sock.send(JSON.stringify({ type: "frontend.register" }))
+  sock.onopen = () => {
+    if (disconnectTimer) {
+      clearTimeout(disconnectTimer)
+      disconnectTimer = null
+    }
+    sock.send(JSON.stringify({ type: "frontend.register" }))
+  }
 
   sock.onmessage = (e) => {
     let data
@@ -846,6 +855,17 @@ function connect() {
   }
 
   sock.onclose = () => {
+    // Start a one-shot countdown on the first disconnect. If we can't
+    // reconnect within the grace period, assume the server is gone for
+    // good (last opencode instance closed) and send everyone home.
+    if (!disconnectTimer) {
+      disconnectTimer = setTimeout(() => {
+        disconnectTimer = null
+        for (const a of [...agents]) {
+          removeAgent(a.instanceId)
+        }
+      }, DISCONNECT_TIMEOUT)
+    }
     setTimeout(connect, 2000)
   }
 }
