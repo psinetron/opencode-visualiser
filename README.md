@@ -123,11 +123,18 @@ Available skins: `person1`, `person2`, `person3`, `person4`, `person5`.
 
 ---
 
-## 💙 Support OpenCode
+## Support the project
 
-This plugin is built on top of [OpenCode](https://opencode.ai) — an open-source AI coding tool. If you find it useful, consider supporting the project by subscribing to **OpenCode GO**. Using the link below gives you **50% off** and helps fund continued development:
+If plugin helps streamline your workflow, consider supporting the project. There are several ways you can help:
 
-👉 [Support Link](https://opencode.ai/go?ref=EZW07YHVTG)
+**1. Give it a Star**
+The easiest way to support EchoesVault is to click the **Star** 🌟 button at the top of this repository. It helps more developers discover the tool and encourages further development.
+
+**2. Direct Sponsorship**
+Click the **Sponsor** button at the top of this repository (next to the Star button) to open the sponsorship dialog and choose how you'd like to support the development directly.
+
+**3. OpenCode GO Subscription**
+EchoesVault is built on top of [OpenCode](https://opencode.ai/go?ref=EZW07YHVTG). By subscribing to **OpenCode GO**, you unlock unlimited agent usage. Using [this referral link](https://opencode.ai/go?ref=EZW07YHVTG) gives you a $5 discount on your subscription and helps fund my work at the same time.
 
 ---
 
