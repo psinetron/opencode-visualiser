@@ -19,7 +19,7 @@
     "@opencode-ai/plugin": ">=1.16.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.3",
     "typescript": "^5.8.0"
   },
   "repository": {
