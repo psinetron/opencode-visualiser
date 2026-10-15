@@ -58,28 +58,37 @@ OpenCode will install the plugin and automatically add it to your project's `ope
 
 ### Manual configuration
 
-Add the plugin name to your `opencode.json`:
+Add the plugin name to your OpenCode config. The key differs between OpenCode major versions:
+
+| OpenCode | Config file | Key |
+|----------|-------------|-----|
+| 2.x | `opencode.json` / `opencode.jsonc` | `plugins` |
+| 1.x (1.16+) | `opencode.json` | `plugin` |
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["psinetron-opencode-visualizer"]
+  "plugins": ["psinetron-opencode-visualizer"]
 }
 ```
 
-OpenCode downloads and caches the package from npm automatically on next startup.
+For OpenCode 1.x use `"plugin"` instead of `"plugins"`. OpenCode downloads and caches the package from npm automatically on next startup.
 
 ### From local files (development)
 
-If you've cloned this repo and want to run from source, point the plugin entry directly at `index.ts`:
+If you've cloned this repo and want to run from source, point the plugin entry at your clone:
 
 ```json
-{
-  "plugin": ["./path/to/OpenCodeVisualizer/index.ts"]
-}
+// OpenCode 2.x — the entry must be the directory containing package.json
+{ "plugins": ["/path/to/opencode-visualiser"] }
+
+// OpenCode 1.x — point at the entry file
+{ "plugin": ["/path/to/opencode-visualiser/index.ts"] }
 ```
 
-Alternatively, copy `index.ts` and the `visualizer/` folder into `.opencode/plugins/` — OpenCode auto-loads any `.ts`/`.js` file placed in that directory.
+Alternatively, copy `index.ts`, `core.ts` and the `visualizer/` folder into `.opencode/plugins/` — OpenCode auto-loads plugins placed there.
+
+> **Note:** OpenCode 2.x rejects plugins that only implement the 1.x API ("Plugin must export a default definition with an id and an effect or setup function"). Versions of this package before 1.1.0 are 1.x-only; upgrade with `opencode plugin psinetron-opencode-visualizer --force`.
 
 ### After installation
 
@@ -141,3 +150,16 @@ EchoesVault is built on top of [OpenCode](https://opencode.ai/go?ref=EZW07YHVTG)
 ## 📜 License
 
 MIT License. See LICENSE for more information. Built, not bought, by psinetron.
+
+---
+
+## 🧪 Development
+
+```sh
+npm install
+npm test        # bun test — unit tests for the shared core and both adapters
+```
+
+`index.ts` default-exports one object that serves both plugin APIs: OpenCode 2.x reads `id` + `setup(ctx)`, OpenCode 1.x calls `server()`. Each adapter only translates its version's events and hooks into calls on the shared `core.ts` (server connection, leader election, skins). See the [V1→V2 plugin migration guide](https://opencode.ai/v2/docs/build/plugins/migrate-v1).
+
+> `tui.ts` (the `/visualizer` command) currently targets the OpenCode 1.x TUI plugin API only.
