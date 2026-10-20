@@ -43,7 +43,7 @@ No prerequisites — OpenCode ships with the Bun runtime, which handles plugin i
 ### Via CLI (recommended)
 
 ```sh
-opencode plugin psinetron-opencode-visualizer
+opencode plugin add psinetron-opencode-visualizer
 ```
 
 This installs the plugin from npm and registers it in your project's `opencode.json`. Add `--global` (or `-g`) to install it across all projects, or `--force` (or `-f`) to replace an existing version.
