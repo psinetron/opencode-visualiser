@@ -1,4 +1,4 @@
-const VISUALIZER_URL = "http://localhost:5173"
+import { discoverServer, visualizerUrl } from "./visualizer/discovery"
 
 interface ToastApi {
   show(input: { message: string; variant: "success" | "error" | "info" | "warning" }): void
@@ -24,11 +24,16 @@ const TuiVisualizerPlugin = async (api: PluginApi) => {
     bindings: {
       "/visualizer": {
         description: "Show the session visualizer URL",
-        handler: () => {
-          api.ui.toast.show({
-            message: `Visualizer: ${VISUALIZER_URL}`,
-            variant: "info",
-          })
+        handler: async () => {
+          try {
+            const port = await discoverServer()
+            api.ui.toast.show({
+              message: port === null ? "Visualizer is not running. Start the visualizer server plugin first." : `Visualizer: ${visualizerUrl(port)}`,
+              variant: port === null ? "warning" : "info",
+            })
+          } catch (error) {
+            api.ui.toast.show({ message: String(error), variant: "error" })
+          }
         },
       },
     },

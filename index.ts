@@ -3,7 +3,7 @@ import { join } from "path"
 import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from "fs"
 import { startServer } from "./visualizer/ocv-server"
 
-const SERVER_PORT = 5173
+let serverPort: number | null = null
 
 let logPath: string | null = null
 
@@ -19,16 +19,13 @@ function log(msg: string) {
   try { appendFileSync(logPath, line) } catch {}
 }
 
-function tryStartServer(): boolean {
+async function tryStartServer(): Promise<boolean> {
   try {
-    const ok = startServer()
-    if (ok) {
-      log(`[plugin] Server running on port ${SERVER_PORT}`)
-    } else {
-      log(`[plugin] Server not started (port ${SERVER_PORT} in use — another instance is the leader)`)
-    }
-    return ok
+    serverPort = await startServer()
+    log(`[plugin] Server available on port ${serverPort}`)
+    return true
   } catch (e) {
+    serverPort = null
     log(`[plugin] Failed to start server: ${e}`)
     return false
   }
@@ -59,7 +56,8 @@ const instanceId = `oc-${process.pid}-${Math.random().toString(36).substring(2, 
 
 function connectToServer(skin: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`ws://localhost:${SERVER_PORT}`)
+    if (serverPort === null) { reject(new Error("No visualizer server available")); return }
+    const socket = new WebSocket(`ws://127.0.0.1:${serverPort}`)
 
     const timeout = setTimeout(() => {
       socket.close()
@@ -103,16 +101,24 @@ function connectToServer(skin: string): Promise<void> {
           // reduces the thundering-herd window when many instances detect
           // the disconnect simultaneously.
           const jitter = Math.floor(Math.random() * 500)
-          setTimeout(() => {
-            tryStartServer()
-            connectToServer(skin).catch(() => {})
-          }, jitter)
+          setTimeout(() => { reconnect(skin) }, jitter)
         }, 1000)
       }
     }
 
     socket.onmessage = () => {}
   })
+}
+
+async function reconnect(skin: string) {
+  if (!await tryStartServer()) {
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
+      void reconnect(skin)
+    }, 1000)
+    return
+  }
+  await connectToServer(skin).catch(() => {})
 }
 
 function sendEvent(eventType: string, payload: Record<string, unknown> = {}) {
@@ -132,11 +138,12 @@ const VisualizerPlugin: Plugin = async ({ project, client, $, directory, worktre
   initLog(directory)
   const skin = resolveSkin(directory)
 
-  tryStartServer()
+  await tryStartServer()
 
   let connected = false
   for (let i = 0; i < 20; i++) {
     try {
+      if (serverPort === null) await tryStartServer()
       await connectToServer(skin)
       connected = true
       log(`[plugin] Connected to server on attempt ${i + 1}`)
@@ -149,7 +156,10 @@ const VisualizerPlugin: Plugin = async ({ project, client, $, directory, worktre
     }
   }
   if (!connected) {
-    log(`[plugin] Could not connect to ws://localhost:${SERVER_PORT} — is the daemon running?`)
+    log(`[plugin] Could not connect to visualizer on port ${serverPort ?? "unknown"}`)
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(() => { reconnectTimer = null; void reconnect(skin) }, 1000)
+    }
   }
 
   const interestingEvents = new Set([

@@ -23,7 +23,7 @@ best-effort basis; no response deadline is guaranteed.
 ## Local Data and Network Access
 
 The plugin runs inside OpenCode and starts an HTTP/WebSocket server bound to
-`127.0.0.1:5173`. It sends the project working directory, selected skin, and
+`127.0.0.1` only, preferring port `5173` (or `OPENCODE_VISUALIZER_PORT`) and trying up to 20 consecutive ports on address collisions. A local health endpoint identifies existing servers for discovery. It sends the project working directory, selected skin, and
 selected OpenCode event payloads to the local visualizer. It stores skin
 preferences in `.opencode/viz-skin.json` and diagnostic logs in
 `.opencode/ocv-debug.log`.
