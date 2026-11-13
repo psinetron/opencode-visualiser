@@ -4,7 +4,7 @@ import { join } from "path"
 import { existsSync } from "fs"
 import { platform } from "os"
 
-const SERVER_PORT = 5173
+import { candidatePorts, discoverServer, HEALTH_ID, HEALTH_PATH, visualizerUrl } from "./discovery"
 
 interface PluginClient {
   instanceId: string
@@ -46,7 +46,7 @@ let browserLaunched = false
 function openBrowser() {
   if (browserLaunched) return
   browserLaunched = true
-  const url = `http://localhost:${SERVER_PORT}`
+  const url = visualizerUrl(server!.port!)
   const os = platform()
 
   setTimeout(() => {
@@ -97,94 +97,109 @@ function resetShutdownTimer() {
 
 const VISUALIZER_DIR = join(import.meta.dir)
 
-export function startServer(): boolean {
-  if (server) return true
-  try {
-    server = Bun.serve({
-      port: SERVER_PORT,
-      hostname: "127.0.0.1",
-      async fetch(req) {
-        if (server!.upgrade(req)) return
-        try {
-          const url = new URL(req.url)
-          const pathname = url.pathname === "/" ? "/index.html" : url.pathname
-          const filePath = join(VISUALIZER_DIR, pathname)
-          if (existsSync(filePath)) {
-            return new Response(Bun.file(filePath), {
-              headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+let starting: Promise<number> | null = null
+
+export function startServer(): Promise<number> {
+  if (server) return Promise.resolve(server.port!)
+  if (!starting) starting = startServerOnce().finally(() => { starting = null })
+  return starting
+}
+
+async function startServerOnce(): Promise<number> {
+  const ports = candidatePorts()
+  const existing = await discoverServer(ports)
+  if (existing !== null) return existing
+  for (const port of ports) {
+    try {
+      server = Bun.serve({
+        port,
+        hostname: "127.0.0.1",
+        async fetch(req) {
+          if (new URL(req.url).pathname === HEALTH_PATH) return new Response(HEALTH_ID)
+          if (server!.upgrade(req)) return
+          try {
+            const url = new URL(req.url)
+            const pathname = url.pathname === "/" ? "/index.html" : url.pathname
+            const filePath = join(VISUALIZER_DIR, pathname)
+            if (existsSync(filePath)) {
+              return new Response(Bun.file(filePath), {
+                headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+              })
+            }
+            return new Response("Not found", { status: 404 })
+          } catch {
+            return new Response("<h1>Server error</h1>", {
+              headers: { "Content-Type": "text/html" },
+              status: 500,
             })
           }
-          return new Response("Not found", { status: 404 })
-        } catch {
-          return new Response("<h1>Server error</h1>", {
-            headers: { "Content-Type": "text/html" },
-            status: 500,
-          })
-        }
-      },
-      websocket: {
-        open(_ws) {},
-        message(ws, message) {
-          let data: Record<string, unknown>
-          try { data = JSON.parse(message as string) } catch { return }
-
-          switch (data.type) {
-            case "register": {
-              const id = data.instanceId as string
-              pluginClients.set(id, {
-                instanceId: id,
-                ws,
-                cwd: (data.cwd as string) || "",
-                skin: (data.skin as string) || "",
-                connectedAt: Date.now(),
-              })
-              broadcast({ type: "instance.added", instanceId: id, cwd: data.cwd, skin: data.skin })
-              ws.send(JSON.stringify({ type: "registered" }))
-              openBrowser()
-              resetShutdownTimer()
-              break
-            }
-            case "frontend.register": {
-              frontendClients.add({ ws })
-              const instances = [...pluginClients.values()].map((c) => ({
-                instanceId: c.instanceId,
-                cwd: c.cwd,
-                skin: c.skin,
-              }))
-              ws.send(JSON.stringify({ type: "state.sync", instances }))
-              break
-            }
-            case "event": {
-              broadcast({ type: "instance.event", instanceId: data.instanceId, event: data.event })
-              break
-            }
-          }
         },
-        close(ws) {
-          for (const [id, client] of pluginClients) {
-            if (client.ws === ws) {
-              pluginClients.delete(id)
-              broadcast({ type: "instance.removed", instanceId: id })
-              break
-            }
-          }
-          for (const client of frontendClients) {
-            if (client.ws === ws) {
-              frontendClients.delete(client)
-              break
-            }
-          }
-          resetShutdownTimer()
-        },
-      },
-    })
+        websocket: {
+          open(_ws) {},
+          message(ws, message) {
+            let data: Record<string, unknown>
+            try { data = JSON.parse(message as string) } catch { return }
 
-    serverLog(`[ocv-server] Listening on http://localhost:${SERVER_PORT}`)
-    return true
-  } catch (e) {
-    serverLog(`[ocv-server] Failed to start server on port ${SERVER_PORT}: ${e}`)
-    return false
+            switch (data.type) {
+              case "register": {
+                const id = data.instanceId as string
+                pluginClients.set(id, {
+                  instanceId: id,
+                  ws,
+                  cwd: (data.cwd as string) || "",
+                  skin: (data.skin as string) || "",
+                  connectedAt: Date.now(),
+                })
+                broadcast({ type: "instance.added", instanceId: id, cwd: data.cwd, skin: data.skin })
+                ws.send(JSON.stringify({ type: "registered" }))
+                openBrowser()
+                resetShutdownTimer()
+                break
+              }
+              case "frontend.register": {
+                frontendClients.add({ ws })
+                const instances = [...pluginClients.values()].map((c) => ({
+                  instanceId: c.instanceId,
+                  cwd: c.cwd,
+                  skin: c.skin,
+                }))
+                ws.send(JSON.stringify({ type: "state.sync", instances }))
+                break
+              }
+              case "event": {
+                broadcast({ type: "instance.event", instanceId: data.instanceId, event: data.event })
+                break
+              }
+            }
+          },
+          close(ws) {
+            for (const [id, client] of pluginClients) {
+              if (client.ws === ws) {
+                pluginClients.delete(id)
+                broadcast({ type: "instance.removed", instanceId: id })
+                break
+              }
+            }
+            for (const client of frontendClients) {
+              if (client.ws === ws) {
+                frontendClients.delete(client)
+                break
+              }
+            }
+            resetShutdownTimer()
+          },
+        },
+      })
+
+      serverLog(`[ocv-server] Listening on ${visualizerUrl(server.port!)}`)
+      return server.port!
+    } catch (e) {
+      if ((e as { code?: string }).code !== "EADDRINUSE") throw e
+      const existing = await discoverServer(ports)
+      if (existing !== null) return existing
+    }
   }
+  throw new Error(`No available visualizer port in ${ports[0]}–${ports.at(-1)}`)
 }
 
 // Detect if running standalone (bun ocv-server.ts) vs imported
@@ -195,8 +210,8 @@ function serverLog(msg: string) {
 }
 
 if (isStandalone) {
-  if (!startServer()) {
-    console.error(`[ocv-server] Port ${SERVER_PORT} may already be in use`)
+  startServer().catch((error) => {
+    console.error(`[ocv-server] ${error}`)
     process.exit(1)
-  }
+  })
 }

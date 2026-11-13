@@ -83,7 +83,7 @@ Alternatively, copy `index.ts` and the `visualizer/` folder into `.opencode/plug
 
 ### After installation
 
-Start (or restart) OpenCode. The plugin spins up a local server on `http://localhost:5173` and opens a Chrome app window automatically. If the browser doesn't open, visit the URL manually.
+Start (or restart) OpenCode. The plugin starts a loopback-only server, preferring port `5173`, and opens a Chrome app window automatically. If that port is occupied, it tries consecutive ports (up to 20 candidates, capped at 65535). Existing visualizer servers in that range are reused. Set `OPENCODE_VISUALIZER_PORT` to an integer from `1` to `65535` before starting OpenCode to change the preferred port; use the same value in all OpenCode processes. If the browser doesn't open, run `/visualizer` in the TUI to see the actual URL (or read the standalone server's startup output). The command reports when no server is running.
 
 Each running OpenCode instance appears as a pixel-art character in the office. When you close an instance, its character walks out. If the instance hosting the server is closed, a surviving instance picks up the server role automatically — no interruption.
 
