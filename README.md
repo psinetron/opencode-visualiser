@@ -42,11 +42,20 @@ No prerequisites — OpenCode ships with the Bun runtime, which handles plugin i
 
 ### Via CLI (recommended)
 
+OpenCode 2.x:
+
 ```sh
-opencode plugin psinetron-opencode-visualizer
+opencode plugin add psinetron-opencode-visualizer
 ```
 
-This installs the plugin from npm and registers it in your project's `opencode.json`. Add `--global` (or `-g`) to install it across all projects, or `--force` (or `-f`) to replace an existing version.
+This installs the plugin from npm and adds it to your global configuration. Use `opencode plugin update` to upgrade, `opencode plugin check` to look for newer versions, and `opencode plugin remove` to uninstall.
+
+OpenCode 1.x uses the older single-command form:
+
+```sh
+opencode plugin psinetron-opencode-visualizer
+# add --global (or -g) to install across all projects, --force (or -f) to replace an existing version
+```
 
 ## Via OpenCode UI
 
@@ -162,4 +171,4 @@ npm test        # bun test — unit tests for the shared core and both adapters
 
 `index.ts` default-exports one object that serves both plugin APIs: OpenCode 2.x reads `id` + `setup(ctx)`, OpenCode 1.x calls `server()`. Each adapter only translates its version's events and hooks into calls on the shared `core.ts` (server connection, leader election, skins). See the [V1→V2 plugin migration guide](https://opencode.ai/v2/docs/build/plugins/migrate-v1).
 
-> `tui.ts` (the `/visualizer` command) currently targets the OpenCode 1.x TUI plugin API only.
+> `tui.ts` (the `/visualizer` command) also default-exports one object for both TUI APIs: OpenCode 2.x reads `id` + `setup(api)`, OpenCode 1.x calls `tui(api)`.
